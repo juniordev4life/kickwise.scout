@@ -1,5 +1,6 @@
 import { parseArgs } from "node:util";
 import { createLogger } from "./config/logger.config.js";
+import { syncPlayerSnapshot } from "./services/playerSnapshot.services.js";
 import {
   syncCurrentSeason,
   syncHistoric,
@@ -37,6 +38,9 @@ try {
     case "season":
       if (!values.season) throw new Error("--season=YYYY/YYYY is required for mode=season");
       result = await syncOneSeason({ season: values.season, log });
+      break;
+    case "player-snapshot":
+      result = await syncPlayerSnapshot(log);
       break;
     default:
       throw new Error(`Unknown mode: ${values.mode}`);
