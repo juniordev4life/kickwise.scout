@@ -10,4 +10,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
 COPY src ./src
 USER node
-CMD ["node", "src/index.js"]
+# Use ENTRYPOINT so that args passed via `gcloud run jobs execute --args=...`
+# are appended to "node src/index.js" instead of replacing the CMD entirely.
+ENTRYPOINT ["node", "src/index.js"]
+CMD ["--mode=current-season"]
