@@ -10,6 +10,7 @@ permissions:
   id-token: write
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   GCP_PROJECT: kickwise-prod
   GCP_REGION: europe-west3
   ARTIFACT_REGISTRY: europe-west3-docker.pkg.dev/kickwise-prod/kickwise
