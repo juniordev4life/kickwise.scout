@@ -1,0 +1,38 @@
+{
+  "name": "kickwise-scout",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "openligadb ETL into BigQuery (matches, teams, players, seasons). Runs as a Cloud Run Job, triggered by Cloud Scheduler.",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --env-file=.env.local src/index.js",
+    "sync:current": "node --env-file=.env.local src/index.js --mode=current-season",
+    "sync:historic": "node --env-file=.env.local src/index.js --mode=historic --since-season=2010/2011",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome check --write .",
+    "lint:check": "biome check .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "check": "biome check --write .",
+    "check:ci": "biome check .",
+    "security:audit": "npm audit --audit-level=high"
+  },
+  "dependencies": {
+    "@google-cloud/bigquery": "^7.9.0",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0",
+    "undici": "^7.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "nock": "^14.0.0",
+    "vitest": "^2.0.0"
+  }
+}
