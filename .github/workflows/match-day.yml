@@ -1,0 +1,71 @@
+name: Match Day (deploy)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT: kickwise-prod
+  GCP_REGION: europe-west3
+  ARTIFACT_REGISTRY: europe-west3-docker.pkg.dev/kickwise-prod/kickwise
+  IMAGE_NAME: scout
+  JOB_NAME: kickwise-euw3-job-scout
+  WIF_PROVIDER: projects/264607219534/locations/global/workloadIdentityPools/kickwise-euw3-pool-github/providers/kickwise-euw3-prov-github
+  DEPLOY_SA: kickwise-euw3-sa-gha-deploy@kickwise-prod.iam.gserviceaccount.com
+
+jobs:
+  warmup-and-deploy:
+    name: Warmup, Push & Match Day
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOY_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Compute image tag
+        id: tag
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "fqin=${ARTIFACT_REGISTRY}/${IMAGE_NAME}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "fqin_latest=${ARTIFACT_REGISTRY}/${IMAGE_NAME}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build container image
+        run: |
+          docker build \
+            -t "${{ steps.tag.outputs.fqin }}" \
+            -t "${{ steps.tag.outputs.fqin_latest }}" \
+            .
+
+      - name: Push container image
+        run: |
+          docker push "${{ steps.tag.outputs.fqin }}"
+          docker push "${{ steps.tag.outputs.fqin_latest }}"
+
+      - name: Update Cloud Run Job
+        run: |
+          gcloud run jobs update "${JOB_NAME}" \
+            --project="${GCP_PROJECT}" \
+            --region="${GCP_REGION}" \
+            --image="${{ steps.tag.outputs.fqin }}" \
+            --quiet
+
+      - name: Note about first historic backfill
+        run: |
+          echo "Scout job updated. The daily Cloud Scheduler will pick this up tomorrow at 06:00 Europe/Berlin."
+          echo "For the one-off historic backfill run:"
+          echo "  gcloud run jobs execute ${JOB_NAME} --region=${GCP_REGION} --args=--mode=historic,--since-season=2010/2011"
