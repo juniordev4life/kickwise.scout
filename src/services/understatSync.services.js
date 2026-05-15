@@ -9,21 +9,22 @@ import { bqTable, getBigQueryClient } from "../config/bigQuery.config.js";
  * against the openligadb matches table.
  */
 const UNDERSTAT_TO_OPENLIGADB_NAME = {
-  "Bayern Munich": "Bayern München",
-  "Bayer Leverkusen": "Bayer Leverkusen",
+  "Bayern Munich": "FC Bayern München",
+  "Bayer Leverkusen": "Bayer 04 Leverkusen",
   "Borussia Dortmund": "Borussia Dortmund",
   "RasenBallsport Leipzig": "RB Leipzig",
   "VfB Stuttgart": "VfB Stuttgart",
   "Eintracht Frankfurt": "Eintracht Frankfurt",
   "Borussia M.Gladbach": "Borussia Mönchengladbach",
   "Union Berlin": "1. FC Union Berlin",
-  Hoffenheim: "TSG 1899 Hoffenheim",
+  Hoffenheim: "TSG Hoffenheim",
+  "1899 Hoffenheim": "TSG Hoffenheim",
   Wolfsburg: "VfL Wolfsburg",
   Freiburg: "SC Freiburg",
   "Mainz 05": "1. FSV Mainz 05",
   Augsburg: "FC Augsburg",
   "St. Pauli": "FC St. Pauli",
-  "Werder Bremen": "Werder Bremen",
+  "Werder Bremen": "SV Werder Bremen",
   "FC Heidenheim": "1. FC Heidenheim 1846",
   "FC Cologne": "1. FC Köln",
   "Holstein Kiel": "Holstein Kiel",
@@ -34,7 +35,6 @@ const UNDERSTAT_TO_OPENLIGADB_NAME = {
   Stuttgart: "VfB Stuttgart",
   "Greuther Fürth": "SpVgg Greuther Fürth",
   "Hertha BSC": "Hertha BSC",
-  "1899 Hoffenheim": "TSG 1899 Hoffenheim",
   "Arminia Bielefeld": "Arminia Bielefeld"
 };
 
