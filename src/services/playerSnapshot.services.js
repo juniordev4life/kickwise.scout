@@ -233,18 +233,28 @@ async function writePointsHistoryToBigQuery(players, kbToken, log) {
       log.warn({ playerId: p.playerId, err: err.message }, "Performance fetch failed");
     }
   }
-  log.info({ rows: rows.length, perfFailures }, "Performance data collected");
-  if (rows.length === 0) {
+  // Dedup on (player_id, season_id, matchday). Players who transferred
+  // mid-season show up on both team rosters, so the same matchday entry
+  // can come back twice. BigQuery's MERGE explicitly forbids multiple
+  // source rows for one target, so we collapse here. Last write wins.
+  const dedupedRows = [...new Map(
+    rows.map((r) => [`${r.player_id}|${r.season_id}|${r.matchday}`, r])
+  ).values()];
+  log.info(
+    { rows: rows.length, deduped: dedupedRows.length, perfFailures },
+    "Performance data collected"
+  );
+  if (dedupedRows.length === 0) {
     log.info("No points-history rows to merge");
     return;
   }
   await mergeRows({
     tableName: "kickbase_player_points",
     keyColumn: ["player_id", "season_id", "matchday"],
-    rows,
+    rows: dedupedRows,
     log
   });
-  log.info({ rowsMerged: rows.length }, "Points history merged");
+  log.info({ rowsMerged: dedupedRows.length }, "Points history merged");
 }
 
 function canonicalSeasonId(raw) {
