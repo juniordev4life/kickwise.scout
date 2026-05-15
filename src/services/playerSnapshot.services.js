@@ -183,11 +183,18 @@ async function writeToBigQuery(players, log) {
  * @param {string} kbToken
  * @param {import("pino").Logger} log
  */
+// Winger's express rate-limit middleware caps at ~250 req/min. With ~488
+// players we'd burn through that in seconds, so we space the performance
+// calls out by ~350ms (≈170/min) — leaves headroom for whatever else
+// Winger is serving concurrently (Playmaker login, squad reads).
+const PERFORMANCE_THROTTLE_MS = 350;
+
 async function writePointsHistoryToBigQuery(players, kbToken, log) {
   const now = new Date().toISOString();
   const rows = [];
   let perfFailures = 0;
   for (const p of players) {
+    await new Promise((resolve) => setTimeout(resolve, PERFORMANCE_THROTTLE_MS));
     try {
       const perf = await fetchPlayerPerformance({
         kbToken,
