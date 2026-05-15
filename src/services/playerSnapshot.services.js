@@ -1,5 +1,6 @@
 import {
   fetchCompetitionTable,
+  fetchPlayerDetail,
   fetchTeamProfile,
   getActiveKickbaseToken
 } from "../adapters/kickbase.adapter.js";
@@ -55,6 +56,36 @@ export async function syncPlayerSnapshot(log) {
 
   log.info({ totalPlayers: allPlayers.length }, "Aggregated player list");
 
+  // Enrich every player with detail data (averagePoints, totalPoints,
+  // pointsHistory). Sequentially to be polite to Kickbase — 489 calls at
+  // ~150 ms each finishes in well under 3 minutes.
+  log.info("Enriching with player-detail data (avg points / total points)");
+  let enriched = 0;
+  let detailFailures = 0;
+  for (const p of allPlayers) {
+    try {
+      const detail = await fetchPlayerDetail({
+        kbToken,
+        playerId: p.playerId,
+        competitionId: COMPETITION_ID,
+        log
+      });
+      p.averagePoints = detail.averagePoints ?? null;
+      p.totalPoints = detail.totalPoints ?? null;
+      p.shirtNumber = detail.shirtNumber ?? null;
+      p.goals = detail.goals ?? null;
+      p.assists = detail.assists ?? null;
+      p.yellowCards = detail.yellowCards ?? null;
+      p.redCards = detail.redCards ?? null;
+      p.pointsHistory = detail.pointsHistory ?? [];
+      enriched++;
+    } catch (err) {
+      detailFailures++;
+      log.warn({ playerId: p.playerId, err: err.message }, "Player detail fetch failed");
+    }
+  }
+  log.info({ enriched, detailFailures }, "Player detail enrichment complete");
+
   await writeToFirestore(allPlayers, log);
   await writeToBigQuery(allPlayers, log);
 
@@ -85,6 +116,15 @@ async function writeToFirestore(players, log) {
           marketValueTrend24h: p.marketValueTrend24h,
           startingProbability: p.startingProbability,
           imageUrl: p.imageUrl,
+          // Enriched from player-detail endpoint
+          averagePoints: p.averagePoints ?? null,
+          totalPoints: p.totalPoints ?? null,
+          shirtNumber: p.shirtNumber ?? null,
+          goals: p.goals ?? null,
+          assists: p.assists ?? null,
+          yellowCards: p.yellowCards ?? null,
+          redCards: p.redCards ?? null,
+          pointsHistory: p.pointsHistory ?? [],
           lastSyncedAt: now
         },
         { merge: true }
@@ -120,7 +160,7 @@ async function writeToBigQuery(players, log) {
     market_value: p.marketValue ?? null,
     delta_24h: p.marketValueTrend24h ?? null,
     delta_7d: null,
-    kickbase_total_points: null,
+    kickbase_total_points: p.totalPoints ?? null,
     last_synced_at: now
   }));
 

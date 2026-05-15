@@ -98,3 +98,25 @@ export async function fetchTeamProfile({ kbToken, teamId, competitionId = "1", l
     log
   );
 }
+
+/**
+ * Fetch per-player detail (averagePoints, totalPoints, pointsHistory,
+ * cards, shirt number).
+ *
+ * @param {object} options
+ * @param {string} options.kbToken
+ * @param {string} options.playerId
+ * @param {string} [options.competitionId="1"]
+ * @param {import("pino").Logger} [options.log]
+ * @returns {Promise<object>} normalized player detail (see Winger normalizer)
+ *
+ * @example
+ *   const detail = await fetchPlayerDetail({ kbToken, playerId: "8227" });
+ */
+export async function fetchPlayerDetail({ kbToken, playerId, competitionId = "1", log }) {
+  return callWinger(
+    kbToken,
+    `/api/v1/kickbase/competitions/${encodeURIComponent(competitionId)}/players/${encodeURIComponent(playerId)}`,
+    log
+  );
+}
