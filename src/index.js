@@ -7,6 +7,7 @@ import {
   syncMatchday,
   syncOneSeason
 } from "./services/sync.services.js";
+import { syncUnderstatRange } from "./services/understatSync.services.js";
 
 const log = createLogger();
 
@@ -16,7 +17,10 @@ const { values } = parseArgs({
     mode: { type: "string", default: process.env.SCOUT_MODE ?? "current-season" },
     matchday: { type: "string" },
     "since-season": { type: "string", default: "2010/2011" },
-    season: { type: "string" }
+    season: { type: "string" },
+    "understat-start": { type: "string" },
+    "understat-end": { type: "string" },
+    "understat-season": { type: "string" }
   },
   allowPositionals: false
 });
@@ -42,6 +46,18 @@ try {
     case "player-snapshot":
       result = await syncPlayerSnapshot(log);
       break;
+    case "understat-range": {
+      const startId = Number(values["understat-start"]);
+      const endId = Number(values["understat-end"]);
+      const season = Number(values["understat-season"]);
+      if (!startId || !endId || !season) {
+        throw new Error(
+          "mode=understat-range requires --understat-start, --understat-end, --understat-season"
+        );
+      }
+      result = await syncUnderstatRange({ startId, endId, season, log });
+      break;
+    }
     default:
       throw new Error(`Unknown mode: ${values.mode}`);
   }
