@@ -45,11 +45,16 @@ export async function mergeRows({ tableName, keyColumn, rows, log }) {
   });
 
   // Load rows via streaming insert. BigQuery's HTTP API caps a single
-  // insert at 10 MB / 50k rows, so we chunk large batches. 1000 keeps each
-  // request well under both limits for our row sizes.
-  const INSERT_CHUNK = 1000;
+  // insert at 10 MB / 50k rows, but observed practice was that even 1000
+  // rows tripped a 413 on the kickbase_player_points table, so we go
+  // conservative at 200 per chunk (~30 KB).
+  const INSERT_CHUNK = 200;
   for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
     const slice = rows.slice(i, i + INSERT_CHUNK);
+    log?.debug?.(
+      { tableName, chunk: i / INSERT_CHUNK + 1, size: slice.length },
+      "Streaming insert chunk"
+    );
     await staging.insert(slice, { skipInvalidRows: false, ignoreUnknownValues: false });
   }
 
