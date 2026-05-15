@@ -44,9 +44,14 @@ export async function mergeRows({ tableName, keyColumn, rows, log }) {
     location: process.env.BQ_LOCATION ?? "europe-west3"
   });
 
-  // Load rows via streaming insert; for batch we could use load jobs,
-  // but for ~5k rows streaming is fine and avoids a temp file.
-  await staging.insert(rows, { skipInvalidRows: false, ignoreUnknownValues: false });
+  // Load rows via streaming insert. BigQuery's HTTP API caps a single
+  // insert at 10 MB / 50k rows, so we chunk large batches. 1000 keeps each
+  // request well under both limits for our row sizes.
+  const INSERT_CHUNK = 1000;
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    const slice = rows.slice(i, i + INSERT_CHUNK);
+    await staging.insert(slice, { skipInvalidRows: false, ignoreUnknownValues: false });
+  }
 
   const columns = schema.fields.map((f) => f.name);
   const updateClauses = columns.filter((c) => !keyCols.includes(c)).map((c) => `T.${c} = S.${c}`);
