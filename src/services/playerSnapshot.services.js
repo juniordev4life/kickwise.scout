@@ -1,6 +1,7 @@
 import {
   fetchCompetitionTable,
   fetchPlayerDetail,
+  fetchPlayerPerformance,
   fetchTeamProfile,
   getActiveKickbaseToken
 } from "../adapters/kickbase.adapter.js";
@@ -88,7 +89,7 @@ export async function syncPlayerSnapshot(log) {
 
   await writeToFirestore(allPlayers, log);
   await writeToBigQuery(allPlayers, log);
-  await writePointsHistoryToBigQuery(allPlayers, log);
+  await writePointsHistoryToBigQuery(allPlayers, kbToken, log);
 
   return { players: allPlayers.length, teams: teams.length, snapshot: snapshotDate() };
 }
@@ -169,45 +170,58 @@ async function writeToBigQuery(players, log) {
 }
 
 /**
- * Persist every player's pointsHistory to BigQuery. Kickbase's player-detail
- * endpoint returns one entry per matchday for the current season, so we tag
- * each row with the current season_id from the `seasons` table and MERGE on
- * (player_id, season_id, matchday).
+ * Persist every player's pointsHistory to BigQuery. Uses the
+ * `/performance` Kickbase endpoint (same one the Striker player-detail
+ * page uses) because the lightweight player-detail `ph` array contains
+ * only the latest ~5 matchdays without explicit day numbers. The
+ * performance endpoint is richer: multi-season, with real matchday
+ * numbers, match ids and per-matchday goals/assists/cards.
  *
- * Idempotent — re-runs on the same day overwrite the matching row, and
- * partial pointsHistory (e.g. matchdays 1–18 mid-season) leaves earlier rows
- * untouched.
+ * Idempotent — MERGE on (player_id, season_id, matchday).
  *
  * @param {Array<object>} players
+ * @param {string} kbToken
  * @param {import("pino").Logger} log
  */
-async function writePointsHistoryToBigQuery(players, log) {
-  const currentSeasonId = await loadCurrentSeasonId(log);
-  if (!currentSeasonId) {
-    log.warn("No current season in BQ — skipping points history write");
-    return;
-  }
+async function writePointsHistoryToBigQuery(players, kbToken, log) {
   const now = new Date().toISOString();
   const rows = [];
+  let perfFailures = 0;
   for (const p of players) {
-    for (const entry of p.pointsHistory ?? []) {
-      // Kickbase's thin pointsHistory enumerates matchdays 1..N for the
-      // current season. Anything beyond 34 is bogus (carry-over from
-      // pagination glitches) — clamp defensively.
-      if (typeof entry.matchday !== "number" || entry.matchday < 1 || entry.matchday > 34) {
-        continue;
-      }
-      rows.push({
-        player_id: p.playerId,
-        season_id: currentSeasonId,
-        matchday: entry.matchday,
-        points: typeof entry.points === "number" ? entry.points : null,
-        has_played: entry.hasPlayed === true,
-        source: "kickbase-snapshot",
-        last_synced_at: now
+    try {
+      const perf = await fetchPlayerPerformance({
+        kbToken,
+        playerId: p.playerId,
+        competitionId: COMPETITION_ID,
+        log
       });
+      for (const season of perf?.seasons ?? []) {
+        // Map "8" → "2023/2024" using the seasonId field if it already
+        // looks like the YYYY/YYYY+1 pattern; otherwise skip — without a
+        // canonical season id we can't safely store the row.
+        const seasonId = canonicalSeasonId(season.seasonId);
+        if (!seasonId) continue;
+        for (const md of season.matchdays ?? []) {
+          if (typeof md.matchday !== "number" || md.matchday < 1 || md.matchday > 34) {
+            continue;
+          }
+          rows.push({
+            player_id: p.playerId,
+            season_id: seasonId,
+            matchday: md.matchday,
+            points: typeof md.points === "number" ? md.points : null,
+            has_played: md.hasPlayed === true,
+            source: "kickbase-performance",
+            last_synced_at: now
+          });
+        }
+      }
+    } catch (err) {
+      perfFailures += 1;
+      log.warn({ playerId: p.playerId, err: err.message }, "Performance fetch failed");
     }
   }
+  log.info({ rows: rows.length, perfFailures }, "Performance data collected");
   if (rows.length === 0) {
     log.info("No points-history rows to merge");
     return;
@@ -218,23 +232,18 @@ async function writePointsHistoryToBigQuery(players, log) {
     rows,
     log
   });
-  log.info({ rowsMerged: rows.length, seasonId: currentSeasonId }, "Points history merged");
+  log.info({ rowsMerged: rows.length }, "Points history merged");
 }
 
-async function loadCurrentSeasonId(log) {
-  const { getBigQueryClient, bqTable } = await import("../config/bigQuery.config.js");
-  const bq = getBigQueryClient();
-  const [rows] = await bq.query({
-    query: `SELECT season_id FROM \`${bqTable("seasons")}\` WHERE is_current LIMIT 1`
-  });
-  if (rows[0]) return rows[0].season_id;
-  // Fallback: latest by lexicographic order (works for YYYY/YYYY+1 format).
-  const [fallback] = await bq.query({
-    query: `SELECT season_id FROM \`${bqTable("seasons")}\` ORDER BY season_id DESC LIMIT 1`
-  });
-  if (fallback[0]) {
-    log.warn({ seasonId: fallback[0].season_id }, "No is_current=TRUE season — using latest");
-    return fallback[0].season_id;
+function canonicalSeasonId(raw) {
+  if (!raw) return null;
+  const s = String(raw);
+  // Already in canonical form
+  if (/^\d{4}\/\d{4}$/.test(s)) return s;
+  // Kickbase sometimes returns just the start year as a 4-digit string
+  if (/^\d{4}$/.test(s)) {
+    const start = Number(s);
+    return `${start}/${start + 1}`;
   }
   return null;
 }

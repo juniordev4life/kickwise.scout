@@ -120,3 +120,28 @@ export async function fetchPlayerDetail({ kbToken, playerId, competitionId = "1"
     log
   );
 }
+
+/**
+ * Multi-season matchday history for a single player — the endpoint the
+ * Striker player-detail page uses for the per-matchday chart. Each
+ * matchday carries the real day number, points, opponent and match id,
+ * so it's also what we use to populate `kickbase_player_points`.
+ *
+ * @param {object} args
+ * @param {string} args.kbToken
+ * @param {string} args.playerId
+ * @param {string} [args.competitionId="1"]
+ * @param {import("pino").Logger} [args.log]
+ * @returns {Promise<{seasons: Array<{seasonId: string, matchdays: Array}>}>}
+ *
+ * @example
+ *   const perf = await fetchPlayerPerformance({ kbToken, playerId: "8227" });
+ *   perf.seasons[0].matchdays[0].matchday // real matchday number, not array index
+ */
+export async function fetchPlayerPerformance({ kbToken, playerId, competitionId = "1", log }) {
+  return callWinger(
+    kbToken,
+    `/api/v1/kickbase/competitions/${encodeURIComponent(competitionId)}/players/${encodeURIComponent(playerId)}/performance`,
+    log
+  );
+}
