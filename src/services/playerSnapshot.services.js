@@ -203,10 +203,11 @@ async function writePointsHistoryToBigQuery(players, kbToken, log) {
         log
       });
       for (const season of perf?.seasons ?? []) {
-        // Map "8" → "2023/2024" using the seasonId field if it already
-        // looks like the YYYY/YYYY+1 pattern; otherwise skip — without a
-        // canonical season id we can't safely store the row.
-        const seasonId = canonicalSeasonId(season.seasonId);
+        // Kickbase's `seasonId` is just an internal numeric id (e.g. "25",
+        // "26"). The `title` field carries the canonical "YYYY/YYYY+1"
+        // string we use everywhere — prefer it, fall back to seasonId for
+        // safety.
+        const seasonId = canonicalSeasonId(season.title) ?? canonicalSeasonId(season.seasonId);
         if (!seasonId) continue;
         for (const md of season.matchdays ?? []) {
           if (typeof md.matchday !== "number" || md.matchday < 1 || md.matchday > 34) {
