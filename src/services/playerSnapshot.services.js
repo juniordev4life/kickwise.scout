@@ -64,6 +64,10 @@ export async function syncPlayerSnapshot(log) {
   let enriched = 0;
   let detailFailures = 0;
   for (const p of allPlayers) {
+    // Same Winger rate-limit applies to the detail loop. Without a throttle
+    // ~488 sequential calls quickly burn through the 250 req/min cap and we
+    // end up paying the retry tax for half the snapshot. 250ms ≈ 240/min.
+    await new Promise((resolve) => setTimeout(resolve, 250));
     try {
       const detail = await fetchPlayerDetail({
         kbToken,
